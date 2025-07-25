@@ -172,6 +172,39 @@ export type Database = {
         }
         Relationships: []
       }
+      registros_chamados_diarios: {
+        Row: {
+          chamados_intercom: number
+          chamados_whatsapp: number
+          created_at: string
+          data: string
+          id: string
+          integrante: string
+          total_chamados: number | null
+          updated_at: string
+        }
+        Insert: {
+          chamados_intercom?: number
+          chamados_whatsapp?: number
+          created_at?: string
+          data: string
+          id?: string
+          integrante: string
+          total_chamados?: number | null
+          updated_at?: string
+        }
+        Update: {
+          chamados_intercom?: number
+          chamados_whatsapp?: number
+          created_at?: string
+          data?: string
+          id?: string
+          integrante?: string
+          total_chamados?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       satisfacao: {
         Row: {
           avaliacao: string | null
