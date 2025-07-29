@@ -1,0 +1,11 @@
+name: support-tracker-hub
+description: Sistema de rastreamento de chamados de suporte
+image: support-tracker-hub:latest
+port: 80
+environment:
+  - NODE_ENV=production
+  - PORT=80
+volumes: []
+networks:
+  - default
+restart: unless-stopped
