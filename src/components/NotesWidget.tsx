@@ -184,10 +184,10 @@ const NotesWidget: React.FC = () => {
               className="w-full px-2 py-1 text-sm border border-border rounded bg-background"
             />
             <Textarea
-              placeholder="Escreva sua anotação aqui..."
+              placeholder="Escreva sua anotação aqui... (ex: Clint & Escola da Perícia - aguardando documentos adicionais)"
               value={newNote.content}
               onChange={(e) => setNewNote(prev => ({ ...prev, content: e.target.value }))}
-              className="min-h-[80px] text-sm resize-none"
+              className="min-h-[100px] max-h-[200px] text-sm resize-y"
             />
             <div className="flex items-center justify-between">
               <div className="flex gap-1">
@@ -237,7 +237,7 @@ const NotesWidget: React.FC = () => {
                       onChange={(e) => setNotes(prev => 
                         prev.map(n => n.id === note.id ? { ...n, content: e.target.value } : n)
                       )}
-                      className="min-h-[60px] text-sm resize-none bg-background"
+                      className="min-h-[80px] max-h-[150px] text-sm resize-y bg-background"
                     />
                     <div className="flex gap-1">
                       <Button

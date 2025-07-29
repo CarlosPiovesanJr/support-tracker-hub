@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { Users, MessageSquare, TrendingUp, CalendarIcon, Save } from 'lucide-react';
+import { Users, MessageSquare, TrendingUp, CalendarIcon, Save, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -33,7 +33,7 @@ const TEAM_MEMBERS = [
 ];
 
 interface SupportTrackerProps {
-  onDataChange: (teamData: TeamMemberData[], averagePerMember: number) => void;
+  onDataChange: (teamData: TeamMemberData[], averagePerMember: number, totalCalls: number) => void;
   showTotals?: boolean;
 }
 
@@ -42,8 +42,12 @@ const SupportTrackerFixed: React.FC<SupportTrackerProps> = ({ onDataChange }) =>
   const [teamData, setTeamData] = useState<TeamMemberData[]>(
     TEAM_MEMBERS.map(name => ({ name, whatsapp: 0 }))
   );
+  const [totalAdjustment, setTotalAdjustment] = useState<number>(0);
+  const [baseTotal, setBaseTotal] = useState<number>(0); // Total base do banco
+  const [initialIndividualSum, setInitialIndividualSum] = useState<number>(0); // Soma inicial dos integrantes
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const { toast } = useToast();
 
   const loadDataForDate = useCallback(async (date: Date) => {
@@ -61,14 +65,37 @@ const SupportTrackerFixed: React.FC<SupportTrackerProps> = ({ onDataChange }) =>
       // Resetar dados da equipe
       const resetTeamData = TEAM_MEMBERS.map(name => ({ name, whatsapp: 0 }));
       
+      let totalFromBank = 0;
+      let hasAdjustment = false;
+      
       // Carregar dados existentes
       if (data && data.length > 0) {
         data.forEach(record => {
-          const memberIndex = resetTeamData.findIndex(member => member.name === record.integrante);
-          if (memberIndex !== -1) {
-            resetTeamData[memberIndex].whatsapp = record.chamados_whatsapp || 0;
+          if (record.integrante === 'TOTAL_ADJUSTMENT') {
+            totalFromBank = record.chamados_whatsapp || 0;
+            hasAdjustment = true;
+          } else {
+            const memberIndex = resetTeamData.findIndex(member => member.name === record.integrante);
+            if (memberIndex !== -1) {
+              resetTeamData[memberIndex].whatsapp = record.chamados_whatsapp || 0;
+            }
           }
         });
+      }
+      
+      // Calcular soma inicial dos integrantes
+      const individualSum = resetTeamData.reduce((sum, member) => sum + member.whatsapp, 0);
+      
+      if (hasAdjustment) {
+        // Se tem TOTAL_ADJUSTMENT, usar como base e calcular ajuste
+        setBaseTotal(totalFromBank);
+        setInitialIndividualSum(individualSum);
+        setTotalAdjustment(totalFromBank - individualSum);
+      } else {
+        // Se não tem TOTAL_ADJUSTMENT, usar soma individual
+        setBaseTotal(individualSum);
+        setInitialIndividualSum(individualSum);
+        setTotalAdjustment(0);
       }
       
       setTeamData(resetTeamData);
@@ -103,6 +130,19 @@ const SupportTrackerFixed: React.FC<SupportTrackerProps> = ({ onDataChange }) =>
           chamados_whatsapp: member.whatsapp
         }));
 
+      // Calcular total final diretamente
+      const currentIndividualSum = teamData.reduce((sum, member) => sum + member.whatsapp, 0);
+      const individualDifference = currentIndividualSum - initialIndividualSum;
+      const finalTotal = baseTotal + individualDifference;
+      
+      const totalRecord = {
+        data: formattedDate,
+        integrante: 'TOTAL_ADJUSTMENT',
+        chamados_whatsapp: finalTotal
+      };
+      
+      dataToSave.push(totalRecord);
+      
       const { error } = await supabase
         .from('registros_chamados_diarios')
         .upsert(dataToSave, {
@@ -115,6 +155,10 @@ const SupportTrackerFixed: React.FC<SupportTrackerProps> = ({ onDataChange }) =>
         title: "Sucesso",
         description: `Dados salvos para ${format(selectedDate, 'dd/MM/yyyy', { locale: ptBR })}`,
       });
+
+      // Feedback visual temporário
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2000);
     } catch (error) {
       console.error('Erro ao salvar dados:', error);
       toast({
@@ -125,33 +169,33 @@ const SupportTrackerFixed: React.FC<SupportTrackerProps> = ({ onDataChange }) =>
     } finally {
       setIsSaving(false);
     }
-  }, [selectedDate, teamData, toast]);
+  }, [selectedDate, teamData, totalAdjustment, baseTotal, initialIndividualSum, toast]);
 
   const totals = useMemo(() => {
-    const totalWhatsapp = teamData.reduce((sum, member) => sum + member.whatsapp, 0);
-    const totalCalls = totalWhatsapp;
+    const currentIndividualSum = teamData.reduce((sum, member) => sum + member.whatsapp, 0);
+    const individualDifference = currentIndividualSum - initialIndividualSum;
+    const totalCalls = baseTotal + individualDifference;
     const averagePerMember = Math.round(totalCalls / TEAM_MEMBERS.length);
     
+    
     return {
-      totalWhatsapp,
+      totalWhatsapp: currentIndividualSum,
       totalCalls,
-      averagePerMember
+      averagePerMember,
+      adjustment: totalAdjustment,
+      baseTotal,
+      individualDifference
     };
-  }, [teamData]);
+  }, [teamData, totalAdjustment, baseTotal, initialIndividualSum]);
 
-  // Carregar dados iniciais
-  useEffect(() => {
-    loadDataForDate(selectedDate);
-  }, []);
-
-  // Carregar dados quando a data muda
+  // Carregar dados quando a data muda ou componente é montado
   useEffect(() => {
     loadDataForDate(selectedDate);
   }, [selectedDate, loadDataForDate]);
 
   useEffect(() => {
-    onDataChange(teamData, totals.averagePerMember);
-  }, [teamData, totals.averagePerMember, onDataChange]);
+    onDataChange(teamData, totals.averagePerMember, totals.totalCalls);
+  }, [teamData, totals.averagePerMember, totals.totalCalls, onDataChange]);
 
   return (
     <div className="space-y-4">
@@ -196,17 +240,62 @@ const SupportTrackerFixed: React.FC<SupportTrackerProps> = ({ onDataChange }) =>
               onClick={saveData} 
               disabled={isSaving || isLoading}
               size="sm"
-              className="bg-primary hover:bg-primary/90 h-8 text-sm"
+              className={`h-8 text-sm transition-all ${
+                justSaved 
+                  ? 'bg-success hover:bg-success/90 text-success-foreground' 
+                  : 'bg-primary hover:bg-primary/90'
+              }`}
+              title="Salvar registros de chamados para a data selecionada"
             >
-              <Save className="mr-1 h-3 w-3" />
-              {isSaving ? 'Salvando...' : 'Salvar'}
+              {justSaved ? (
+                <>
+                  <Check className="mr-1 h-3 w-3" />
+                  Salvo!
+                </>
+              ) : (
+                <>
+                  <Save className="mr-1 h-3 w-3" />
+                  {isSaving ? 'Salvando...' : 'Salvar'}
+                </>
+              )}
             </Button>
             
-            {/* Totais Inline */}
+            {/* Totais Inline com Controles */}
             <div className="flex items-center gap-4 text-sm ml-auto">
               <div className="text-center">
-                <span className="text-xs text-muted-foreground block">Total</span>
-                <span className="font-bold text-primary">{totals.totalCalls}</span>
+                <span className="text-xs text-muted-foreground block">Individual</span>
+                <span className="font-bold text-muted-foreground">{totals.totalWhatsapp}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-center">
+                  <span className="text-xs text-muted-foreground block">Total</span>
+                  <div className="flex items-center gap-1">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="h-6 w-6 p-0" 
+                      onClick={() => setBaseTotal(prev => Math.max(0, prev - 1))}
+                      title="Diminuir total geral"
+                    >
+                      -
+                    </Button>
+                    <span className="font-bold text-primary min-w-[40px] text-center">{totals.totalCalls}</span>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="h-6 w-6 p-0" 
+                      onClick={() => setBaseTotal(prev => prev + 1)}
+                      title="Aumentar total geral"
+                    >
+                      +
+                    </Button>
+                  </div>
+                  {totals.individualDifference !== 0 && (
+                    <span className={`text-xs ${totals.individualDifference > 0 ? 'text-success' : 'text-destructive'}`}>
+                      {totals.individualDifference > 0 ? '+' : ''}{totals.individualDifference}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="text-center">
                 <span className="text-xs text-muted-foreground block">Média</span>
@@ -240,6 +329,7 @@ const SupportTrackerFixed: React.FC<SupportTrackerProps> = ({ onDataChange }) =>
                     size="sm"
                     className="h-7 w-7 p-0" 
                     onClick={() => updateMemberData(index, Math.max(0, member.whatsapp - 1))}
+                    title={`Diminuir chamados de ${member.name}`}
                   >
                     -
                   </Button>
@@ -249,12 +339,14 @@ const SupportTrackerFixed: React.FC<SupportTrackerProps> = ({ onDataChange }) =>
                     value={member.whatsapp || ''}
                     onChange={(e) => updateMemberData(index, parseInt(e.target.value) || 0)}
                     className="text-center h-7 w-14 text-sm [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                    title={`Número de chamados atendidos por ${member.name}`}
                   />
                   <Button 
                     variant="outline" 
                     size="sm"
                     className="h-7 w-7 p-0" 
                     onClick={() => updateMemberData(index, member.whatsapp + 1)}
+                    title={`Aumentar chamados de ${member.name}`}
                   >
                     +
                   </Button>

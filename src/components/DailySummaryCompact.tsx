@@ -12,9 +12,13 @@ interface TeamMemberData {
 interface DailySummaryCompactProps {
   teamData: TeamMemberData[];
   averagePerMember: number;
+  totalCalls: number;
 }
 
-const DailySummaryCompact: React.FC<DailySummaryCompactProps> = ({ teamData, averagePerMember }) => {
+
+const DailySummaryCompact: React.FC<DailySummaryCompactProps> = ({ teamData, averagePerMember, totalCalls }) => {
+
+
   const stats = useMemo(() => {
     const totalCalls = teamData.reduce((sum, member) => sum + member.whatsapp, 0);
     const activeMembers = teamData.filter(member => member.whatsapp > 0).length;
@@ -59,10 +63,14 @@ const DailySummaryCompact: React.FC<DailySummaryCompactProps> = ({ teamData, ave
           <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
             <div className="flex items-center gap-2 mb-1">
               <BarChart3 className="w-3 h-3 text-primary" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total</span>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Único</span>
             </div>
-            <p className="text-xl font-bold text-primary">{stats.totalCalls}</p>
-            <p className="text-xs text-muted-foreground">chamados hoje</p>
+            <p className="text-xl font-bold text-primary">
+              {totalCalls}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              soma do dia
+            </p>
           </div>
           
           <div className="bg-success/5 rounded-lg p-3 border border-success/20">
@@ -84,7 +92,7 @@ const DailySummaryCompact: React.FC<DailySummaryCompactProps> = ({ teamData, ave
               .sort((a, b) => b.whatsapp - a.whatsapp)
               .slice(0, 5)
               .map((member, index) => {
-                const percentage = stats.totalCalls > 0 ? (member.whatsapp / stats.totalCalls) * 100 : 0;
+                const percentage = totalCalls > 0 ? (member.whatsapp / totalCalls) * 100 : 0;
                 const isAboveAverage = member.whatsapp > averagePerMember;
                 
                 return (
